@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Envoy Email Service - Lambda + HTTP API for send-on-behalf and inbox (no transactional)
+Parameters:
+  EmailServiceApiKey:
+    Type: String
+    Default: ''
+    NoEcho: true
+    Description: (Optional) API key callers must send as Authorization Bearer. Leave empty to skip auth.
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: nodejs18.x
+    MemorySize: 256
+    Architectures:
+    - x86_64
+Resources:
+  EmailApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: prod
+      CorsConfiguration:
+        AllowMethods:
+        - POST
+        AllowOrigins:
+        - '*'
+        AllowHeaders:
+        - Content-Type
+        - Authorization
+  EmailFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: EmailFunction
+      Environment:
+        Variables:
+          EMAIL_SERVICE_API_KEY:
+            Ref: EmailServiceApiKey
+      Events:
+        SendOnBehalf:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: EmailApi
+            Path: /send-on-behalf
+            Method: post
+        InboxList:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: EmailApi
+            Path: /inbox/list
+            Method: post
+        InboxMessage:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: EmailApi
+            Path: /inbox/message
+            Method: post
+    Metadata:
+      BuildMethod: makefile
+      SamResourceId: EmailFunction
+Outputs:
+  ApiEndpoint:
+    Description: Base URL for the email API (set this as EMAIL_SERVICE_URL in envoy-project-management)
+    Value:
+      Fn::Sub: https://${EmailApi}.execute-api.${AWS::Region}.amazonaws.com/prod
+  ApiId:
+    Description: HTTP API ID
+    Value:
+      Ref: EmailApi
